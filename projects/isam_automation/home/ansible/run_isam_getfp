@@ -1,0 +1,7 @@
+#!/bin/bash
+
+ansible --version
+
+ansible -i localhost, localhost -e ansible_connection=local -m setup
+
+ansible-playbook -i inventory isam_getfp.yml
