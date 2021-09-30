@@ -1,0 +1,26 @@
+---
+- name: Test Ansible
+  vars_files:
+  - isam.env
+  hosts: isam
+  connection: local
+
+  tasks:
+
+  - debug:
+      msg: "This is a test"
+
+  - name: Get ISAM Fixpack
+    vars:
+      username: "{{isam_admin_id}}"
+      password: "{{isam_admin_pw}}"
+      lmi_port: "{{isam_lmi_port}}"
+      log_level: DEBUG
+      force: False
+    include_role:
+      name: get_fixpack
+
+  - name: Show Fixpack Information
+    debug:
+      var: fixpack_ret_obj
+...
