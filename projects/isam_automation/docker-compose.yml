@@ -1,1 +1,51 @@
+#version: '3.8'
 
+services:
+  ansible-controller:
+    hostname: ansible-controller
+    container_name: ansible-controller
+    image: ubuntu
+    volumes:
+     - ${DOCKER_VOLUMES}/home/ansible:/home/ansible
+    command: >
+      bash -c "
+               echo 'Running apt update...';
+               apt -y update >/dev/null 2>&1;
+               echo 'Installing software-properties-common...';
+               apt -y install software-properties-common >/dev/null 2>&1;
+               echo 'Adding Ansible repository...';
+               add-apt-repository --yes --update ppa:ansible/ansible >/dev/null 2>&1;
+               echo 'Installing Ansible...';
+               apt -y install ansible >/dev/null 2>&1;
+               echo 'Installing curl...';
+               apt -y install curl >/dev/null 2>&1;
+               echo 'Installing vim...';
+               apt -y install vim >/dev/null 2>&1;
+               echo 'Installing inetutils-ping...';
+               apt -y install inetutils-ping >/dev/null 2>&1;
+               echo 'Installing nginx...';
+               apt -y install nginx >/dev/null 2>&1;
+               echo 'Installing git...';
+               apt -y install git >/dev/null 2>&1;
+               echo 'Enabling nginx...';
+               systemctl enable nginx >/dev/null 2>&1;
+               echo 'Starting nginx...';
+               service nginx start >/dev/null 2>&1;
+               echo 'Creating user ansible...';
+               adduser --disabled-password --gecos '' ansible >/dev/null 2>&1;
+               echo 'Cloning IBM-Security / ibmsecurity...';
+               su - ansible -c 'git clone https://github.com/IBM-Security/ibmsecurity.git' >/dev/null 2>&1;
+               echo 'Cloning IBM-Security / isam-support...';
+               su - ansible -c 'git clone https://github.com/IBM-Security/isam-support.git' >/dev/null 2>&1;
+               echo 'Cloning IBM-Security / isam-ansible-collection...';
+               su - ansible -c 'git clone https://github.com/IBM-Security/isam-ansible-collection.git' >/dev/null 2>&1;
+               echo 'Cloning IBM-Security / isam-ansible-roles...';
+               su - ansible -c 'git clone https://github.com/IBM-Security/isam-ansible-roles.git' >/dev/null 2>&1;
+               echo '*** Installations Complete! ***';
+               tail -f /dev/null;"
+#   tty: true
+    ports:
+     - 22:22
+#   privileged: true
+#   networks:
+#    - dalydiligence.io
