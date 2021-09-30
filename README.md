@@ -15,3 +15,5 @@ Steps:
 3. Navigate to the desired project folder.
 4. Review the .env file and update any necessary parameters.
 5. Issue the command "docker-compose up".
+
+This is sample code and is provided as is with no warranty, either expressed or implied. The user assumes all risks.
