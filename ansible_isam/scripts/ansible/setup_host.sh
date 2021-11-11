@@ -29,9 +29,9 @@ su - ansible -c "mkdir /home/ansible/inventory" >/dev/null 2>&1
 su - ansible -c "curl $FILE_SHARE/ansible/home/ansible/inventory/hosts > /home/ansible/inventory/hosts"
 
 echo "Downloading isam_playbook.yml..."
-su - ansible -c "curl $FILE_SHARE/ansible/home/ansible/isam_playbook.yml > /home/ansible/isam_playbook.yml"
+su - ansible -c "curl $FILE_SHARE/ansible/home/ansible/isam.yml > /home/ansible/isam.yml"
 
-echo "Downloading isam_.env..."
+echo "Downloading isam.env..."
 su - ansible -c "curl $FILE_SHARE/ansible/home/ansible/isam.env > /home/ansible/isam.env"
 
 echo "Cloning ISAM Ansible repositories..."
