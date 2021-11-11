@@ -1,0 +1,59 @@
+---
+- name: ISAM Test Playbook
+  vars_files:
+    - isam.env
+  hosts: all
+  connection: local
+
+  tasks:
+
+    - name: Task 1
+      debug:
+        msg: "This is Task 1"
+
+    - name: Get Fixpack Info
+      uri:
+        url: https://host.docker.internal/core/sys/versions
+        url_username: {{ isam_lmi_user }}
+        url_password: {{ isam_lmi_pass }}
+        force_basic_auth: True
+        validate_certs: False
+        method: "GET"
+        return_content: True
+        headers:
+          Accept: "application/json"
+      register: get_fixpack_out
+      failed_when: False
+
+    - name: Debug get_fixpack_out
+      debug:
+        var: get_fixpack_out
+
+    - name: Catch error Get Fixpack Info
+      fail:
+        msg: "Get Fixpack Info returned a fatal HTTP status code: {{ get_fixpack_out.status }}"
+      when:
+        - 'get_fixpack_out.status != 200'
+
+    - name: Run isam-ansible-roles/get_fixpack
+      vars:
+        username: {{ isam_lmi_user }}
+        password: {{ isam_lmi_pass }}
+        lmi_port: 443
+        log_level: INFO
+        force: false
+      import_role:
+        name: get_fixpack
+      register: get_fixpack_out
+      failed_when: False
+
+    - name: Debug get_fixpack_out
+      debug:
+        var: get_fixpack_out
+
+    - name: Check get_fixpack rc
+      fail:
+        msg: "Fatal error: get_fixpack produced a non-zero exit code: {{ get_fixpack_out.status }}"
+      when:
+        - get_fixpack_out.status != 200
+...
