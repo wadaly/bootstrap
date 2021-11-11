@@ -18,10 +18,17 @@ apt-get install -y ansible git inetutils-ping vim >/dev/null 2>&1
 echo "Creating user <ansible>..."
 adduser --disabled-password --gecos "" ansible >/dev/null 2>&1
 
+echo "Updating /home/ansible/.profile..."
 printf "\n\nPYTHONPATH=/home/ansible/ibmsecurity\n" >> /home/ansible/.profile
 
+echo "Downloading ansible.cfg..."
 su - ansible -c "curl $FILE_SHARE/ansible/home/ansible/ansible.cfg > /home/ansible/ansible.cfg"
 
+echo "Creating Ansible inventory..."
+su - ansible -c "mkdir /home/ansible/inventory" >/dev/null 2>&1
+su - ansible -c "curl $FILE_SHARE/ansible/home/ansible/inventory/hosts > /home/ansible/inventory/hosts"
+
+echo "Cloning ISAM Ansible repositories..."
 su - ansible -c "git clone https://github.com/IBM-Security/ibmsecurity.git" >/dev/null 2>&1
 su - ansible -c "git clone https://github.com/IBM-Security/isam-support.git" >/dev/null 2>&1
 su - ansible -c "git clone https://github.com/IBM-Security/isam-ansible-collection.git" >/dev/null 2>&1
