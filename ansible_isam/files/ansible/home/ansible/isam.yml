@@ -14,8 +14,8 @@
     - name: Get Fixpack Info
       uri:
         url: https://host.docker.internal/core/sys/versions
-        url_username: {{ isam_lmi_user }}
-        url_password: {{ isam_lmi_pass }}
+        url_username: "{{ isam_lmi_user }}"
+        url_password: "{{ isam_lmi_pass }}"
         force_basic_auth: True
         validate_certs: False
         method: "GET"
@@ -37,8 +37,8 @@
 
     - name: Run isam-ansible-roles/get_fixpack
       vars:
-        username: {{ isam_lmi_user }}
-        password: {{ isam_lmi_pass }}
+        username: "{{ isam_lmi_user }}"
+        password: "{{ isam_lmi_pass }}"
         lmi_port: 443
         log_level: INFO
         force: false
