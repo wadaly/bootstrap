@@ -1,0 +1,25 @@
+version: '3'
+
+services:
+  nginx:
+    hostname: nginx
+    container_name: nginx
+    image: nginx
+    command: >
+      /bin/bash -c "
+
+        mkdir -p /shared_files/openldap/container/service/slapd/assets/certs;
+        mkdir -p /shared_files/postgresql/var/local;
+
+        openssl dhparam -out /shared_files/openldap/container/service/slapd/assets/certs/dhparam.pem 2048;
+
+        openssl req -x509 -newkey rsa:4096 -keyout /shared_files/openldap/container/service/slapd/assets/certs/ldap.key -out /shared_files/openldap/container/service/slapd/assets/certs/ldap.crt -days 3650 -subj /CN=openldap/O=ibm/C=us -nodes;
+
+        cp /shared_files/openldap/container/service/slapd/assets/certs/ldap.crt /shared_files/openldap/container/service/slapd/assets/certs/ca.crt;
+
+        openssl req -x509 -newkey rsa:4096 -keyout /shared_files/postgresql/var/local/postgres.key -out /shared_files/postgresql/var/local/postgres.crt -days 3650 -subj /CN=postgresql/O=ibm/C=us -nodes;
+
+        cat /shared_files/postgresql/var/local/postgres.key /shared_files/postgresql/var/local/postgres.crt > /shared_files/postgresql/var/local/server.pem;"
+
+    volumes:
+      - ./shared_files:/shared_files
