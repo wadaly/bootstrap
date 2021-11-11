@@ -1,2 +1,2 @@
-[isam_cluster_master]
+[isamconfig]
 host.docker.internal
