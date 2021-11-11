@@ -1,0 +1,333 @@
+---
+- name: Externalize ISAM Runtime Database
+  vars_files:
+  - isam.env
+  hosts: isam_cluster_master
+  connection: local
+ 
+  tasks:
+ 
+  - name: Get ISAM Cluster Configuration
+    uri:
+      url: "https://{{ inventory_hostname }}:{{ isam_lmi_port }}/isam/cluster/v2"
+      user: "{{isam_admin_id}}"
+      password: "{{isam_admin_pw}}"
+      method: GET
+      force_basic_auth: yes
+      validate_certs: no
+      status_code: 200
+      headers:
+        Accept: application/json
+      return_content: yes
+    register: isam_cluster_config_out
+
+  - name: Debug isam_cluster_config_out
+    debug:
+      var: isam_cluster_config_out
+
+  - name: Checking for embedded ISAM runtime database
+    debug:
+      msg: The ISAM runtime database is not embedded.
+    when:
+      - not ( isam_cluster_config_out.content | from_json ).hvdb_embedded
+
+# - name: Breakpoint
+#   fail:
+#     msg: Bailing out.
+#   when:
+#     - True
+ 
+  - name: Get database information from isamdb2 host
+    shell: >
+      /usr/bin/docker exec isamdb2 su - "{{ isam_rt_db_inst }}" -c "db2 list database directory"
+    register: db2_list_database_out
+
+  - name: Debug db2_list_database_out
+    debug:
+      var: db2_list_database_out
+
+  - name: Debug db2_list_database_out
+    debug:
+       msg: "HVDB database already exists. No work to do."
+    when:
+      - '"HVDB" in db2_list_database_out.stdout'
+
+# Run this block only if the remote ISAM runtime database does not exist.
+# Perhaps I should also make sure the instance is responding.
+# I am using only exclusive criteria in my filter below.
+# A combintion of exclusive and invlusive criteria would be more robust.
+ 
+  - name: Configure DB2 HVDB
+    block:
+
+      - name: Download isam_access_control_db2.sql
+        uri:
+          url: "https://{{ inventory_hostname }}:{{ isam_lmi_port }}/isam/downloads/access_control/database/db2/runtime/isam_access_control_db2.sql"
+          user: "{{isam_admin_id}}"
+          password: "{{isam_admin_pw}}"
+          method: GET
+          force_basic_auth: yes
+          validate_certs: no
+          status_code: 200
+          headers:
+            Accept: application/json
+          return_content: yes
+        register: isam_sql_out
+
+      - name: Write isam_access_control_db2.sql
+        copy:
+          content: "{{ ( isam_sql_out.content | from_json ).contents }}"
+          dest: /tmp/isam_access_control_db2.sql
+
+      - name: Replace &DBINSTANCE
+        replace:
+          path: /tmp/isam_access_control_db2.sql
+          regexp: '&DBINSTANCE'
+          replace: "{{ isam_rt_db_inst }}"
+
+      - name: Replace &DBUSER
+        replace:
+          path: /tmp/isam_access_control_db2.sql
+          regexp: '&DBUSER'
+          replace: "{{ isam_rt_db_id }}"
+
+# Update this logic to prevent echo of password data.
+      - name: Replace &DBPASSWORD
+        replace:
+          path: /tmp/isam_access_control_db2.sql
+          regexp: '&DBPASSWORD'
+          replace: "{{ isam_rt_db_pw }}"
+
+      - name: Configure Database
+        shell: >
+          /usr/bin/docker cp /tmp/isam_access_control_db2.sql isamdb2:/tmp/isam_access_control_db2.sql;
+          /usr/bin/docker exec isamdb2 su - "{{ isam_rt_db_inst }}" -c "db2 -tsvf /tmp/isam_access_control_db2.sql"
+        register: configure_db_out
+        failed_when: false
+
+# isam_access_control_db2.sql contains sensitive infomration.
+# We should remove it upon success or failure.
+ 
+      - name: Remove remote isam_access_control_db2.sql file
+        shell: >
+          /usr/bin/docker exec isamdb2 rm -f /tmp/isam_access_control_db2.sql;
+        register: remove_remote_file
+        failed_when: False
+
+      - name: Remove local isam_access_control_db2.sql file
+        shell: >
+          rm -f /tmp/isam_access_control_db2.sql;
+        register: remove_local_file
+        failed_when: False
+
+      - name: Debug configure_db_out
+        debug:
+          var: configure_db_out.stdout_lines
+
+      - name: Detect DB2/SQL Informational Messages
+        debug:
+          msg: "There were DB2/SQL informational messages in the output of \"db2 -tsvf /tmp/isam_access_control_db2.sql\""
+        when:
+          - configure_db_out | string | regex_search('[DS][BQ][2L][0-9][0-9][0-9][0-9]I')
+
+      - name: Detect DB2/SQL Warning Messages
+        debug:
+          msg: "There were DB2/SQL warning messages in the output of \"db2 -tsvf /tmp/isam_access_control_db2.sql\""
+        when:
+          - configure_db_out | string | regex_search('[DS][BQ][2L][0-9][0-9][0-9][0-9]W')
+
+      - name: Detect DB2/SQL Error Messages
+        fail:
+          msg: "There were DB2 error messages in the output of \"db2 -tsvf /tmp/isam_access_control_db2.sql\""
+        when:
+          - configure_db_out | string | regex_search('[DS][BQ][2L][0-9][0-9][0-9][0-9]E')
+
+      - name: Fail on non-zero exit code for configure_db_out or file removal
+        fail:
+          msg: Database configuration produced a non-zero exit code. Failing.
+        when:
+          - ( ( configure_db_out.rc != 0 ) or
+              (  remove_remote_file.rc != 0 ) or
+              (  remove_local_file.rc != 0 )
+            )
+ 
+      - name: Export embedded ISAM runtime database
+        uri:
+          url: "https://{{ inventory_hostname }}:{{ isam_lmi_port }}/isam/cluster/hvdb/v1?type=db2"
+          user: "{{isam_admin_id}}"
+          password: "{{isam_admin_pw}}"
+          method: GET
+          force_basic_auth: yes
+          validate_certs: no
+          status_code: 200
+          headers:
+            Accept: application/json
+          return_content: yes
+        register: isam_hvdb_out
+
+      - name: Debug isam_hvdb_out
+        debug:
+          var: isam_hvdb_out
+
+      - name: Write /tmp/hvdb_db2.zip
+        copy:
+          content: "{{ isam_hvdb_out.content }}"
+          dest: /tmp/hvdb_db2.zip
+
+      - name: Load the ISAM runtime database into DB2
+        shell: >
+          /usr/bin/docker cp /tmp/hvdb_db2.zip isamdb2:/tmp/hvdb_db2.zip;
+          /usr/bin/docker exec isamdb2 /bin/bash -c "rm -rf /tmp/hvdb_db2; mkdir /tmp/hvdb_db2; cd /tmp/hvdb_db2; unzip /tmp/hvdb_db2.zip; ls -l;";
+          /usr/bin/docker exec isamdb2 su - "{{ isam_rt_db_inst }}" -c "cd /tmp/hvdb_db2; db2 ATTACH TO {{ isam_rt_db_inst }}; db2 CONNECT TO hvdb; db2 -vct -f import_data_hvdb.sql;";
+        register: load_hvdb_out
+        failed_when: false
+
+      - name: Debug load_hvdb_out
+        debug:
+          var: load_hvdb_out
+        when:
+          - load_hvdb_out is defined
+
+      - name:  Remove the remote /tmp/hvdb_db2 directory and /tmp/hvdb_db2.zip file
+        shell: >
+          /usr/bin/docker exec isamdb2 /bin/bash -c "rm -rf /tmp/hvdb_db2; rm -f /tmp/hvdb_db2.zip; ls -l /tmp;";
+
+      - name:  Remove the local /tmp/hvdb_db2.zip file
+        shell: >
+          rm -f /tmp/hvdb_db2.zip;
+
+      - name: Show load_hvdb_out return code
+        debug:
+          msg: "load_hvdb_out return code = {{ load_hvdb_out.rc }}"
+        when:
+          - load_hvdb_out.rc is defined
+
+      - name: Detect DB2/SQL Informational Messages
+        debug:
+          msg: "There were DB2/SQL informational messages in the output of \"db2 -vct -f import_data_hvdb.sql\""
+        when:
+          - load_hvdb_out | string | regex_search('[DS][BQ][2L][0-9][0-9][0-9][0-9]I')
+
+      - name: Detect DB2/SQL Warning Messages
+        debug:
+          msg: "There were DB2/SQL warning messages in the output of \"db2 -vct -f import_data_hvdb.sql\""
+        when:
+          - load_hvdb_out | string | regex_search('[DS][BQ][2L][0-9][0-9][0-9][0-9]W')
+
+      - name: Detect DB2/SQL Error Messages
+        fail:
+          msg: "There were DB2 error messages in the output of \"db2 -vct -f import_data_hvdb.sql\""
+        when:
+          - load_hvdb_out | string | regex_search('[DS][BQ][2L][0-9][0-9][0-9][0-9]E')
+
+      - name: Check load_hvdb_out return code
+        fail:
+          msg: The hvdb import command produced a non-zero return code.
+        when:
+          - load_hvdb_out.rc != 0
+          - load_hvdb_out.rc != 2
+
+      - name: Generate an ISAM snapshot
+        uri:
+          url: "https://{{ inventory_hostname }}:{{ isam_lmi_port }}/snapshots"
+          user: "{{isam_admin_id}}"
+          password: "{{isam_admin_pw}}"
+          method: POST
+          force_basic_auth: yes
+          validate_certs: no
+          status_code: 200
+          headers:
+            Accept: application/json
+          return_content: yes
+          body_format: json
+          body:
+            comment: "Created by Ansible from {{ ansible_hostname }} on {{ ansible_date_time.date }} at {{ ansible_date_time.time }}"
+        register: isam_snapshot_out
+        failed_when: false
+
+      - name: Debug isam_snapshot_out
+        debug:
+          var: isam_snapshot_out
+
+      - name: Check isam_snapshot_out status
+        fail:
+          msg: "The ISAM snapshot request produced a fatal return code! - {{ isam_snapshot_out.status }}"
+        when:
+          - isam_snapshot_out.status != 200
+
+      - name: Set Cluster Config
+        uri:
+          url: "https://{{ inventory_hostname }}:{{ isam_lmi_port }}/isam/cluster/v2"
+          user: "{{isam_admin_id}}"
+          password: "{{isam_admin_pw}}"
+          method: POST
+          force_basic_auth: yes
+          validate_certs: no
+          status_code: 200, 204
+          headers:
+            Accept: application/json
+          return_content: yes
+          body_format: json
+          body:
+            primary_master: 127.0.0.1
+            cfgdb_embedded: True
+            dsc_external_clients: False
+            dsc_worker_threads: 30
+            dsc_maximum_session_lifetime: 120
+            dsc_client_grace_period: 30
+            first_port: 10000
+            hvdb_embedded: False
+            hvdb_db_type: db2
+            hvdb_address: "{{ isam_rt_db_host }}"
+            hvdb_port: 50000
+            hvdb_db_secure: false
+            hvdb_user: "{{ isam_rt_db_id }}"
+            hvdb_password: "{{ isam_rt_db_pw }}"
+            hvdb_db_name: hvdb
+        register: isam_cluster_config_property_out
+        failed_when: false
+
+      - name: Debug isam_cluster_config_property_out
+        debug:
+          var: isam_cluster_config_property_out
+
+      - name: Check isam_cluster_config_property_out status
+        fail:
+          msg: "Set Cluster Config produced a fatal status code! - isam_cluster_config_property_out.status"
+        when:
+          - isam_cluster_config_property_out.status != 200
+          - isam_cluster_config_property_out.status != 204
+
+      - name: Apply Pending Changes
+        uri:
+          url: "https://{{ inventory_hostname }}:{{ isam_lmi_port }}/isam/pending_changes"
+          user: "{{isam_admin_id}}"
+          password: "{{isam_admin_pw}}"
+          method: PUT
+          force_basic_auth: yes
+          validate_certs: no
+          status_code: 200
+          timeout: 120
+          headers:
+            Accept: application/json
+          return_content: yes
+          body_format: json
+        register: isam_apply_pending_changes
+        failed_when: false
+
+      - name: Debug isam_apply_pending_changes
+        debug:
+          var: isam_apply_pending_changes
+
+      - name: Check isam_apply_pending_changes status
+        fail:
+          msg: "Apply Pending Changes produced a fatal status code! - isam_apply_pending_changes.status"
+        when:
+          - isam_apply_pending_changes.status != 200
+
+# I need to check output of db2 -vct -f import_data_hvdb.sql for error messages.
+
+    when:
+      - '"HVDB" not in db2_list_database_out.stdout'
+      - ( isam_cluster_config_out.content | from_json ).hvdb_embedded
+...
