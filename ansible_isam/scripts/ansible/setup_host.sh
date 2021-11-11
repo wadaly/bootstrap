@@ -19,7 +19,7 @@ echo "Creating user <ansible>..."
 adduser --disabled-password --gecos "" ansible >/dev/null 2>&1
 
 echo "Updating /home/ansible/.profile..."
-printf "\n\nPYTHONPATH=/home/ansible/ibmsecurity\n" >> /home/ansible/.profile
+printf "\n\nexport PYTHONPATH=/home/ansible/ibmsecurity\n" >> /home/ansible/.profile
 
 echo "Downloading ansible.cfg..."
 su - ansible -c "curl $FILE_SHARE/ansible/home/ansible/ansible.cfg > /home/ansible/ansible.cfg"
