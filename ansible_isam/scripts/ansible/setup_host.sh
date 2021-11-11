@@ -20,9 +20,9 @@ adduser --disabled-password --gecos "" ansible >/dev/null 2>&1
 
 printf "\n\nPYTHONPATH=/home/ansible/ibmsecurity\n" >> /home/ansible/.profile
 
-su - ansible -c "curl $FILESHARE/ansible/home/ansible/ansible.cfg"
+su - ansible -c "curl $FILE_SHARE/ansible/home/ansible/ansible.cfg > /home/ansible/ansible.cfg"
 
-su - ansible -c "git clone https://github.com/IBM-Security/ibmsecurity.git"
-su - ansible -c "git clone https://github.com/IBM-Security/isam-support.git"
-su - ansible -c "git clone https://github.com/IBM-Security/isam-ansible-collection.git"
-su - ansible -c "git clone https://github.com/IBM-Security/isam-ansible-roles.git"
+su - ansible -c "git clone https://github.com/IBM-Security/ibmsecurity.git" >/dev/null 2>&1
+su - ansible -c "git clone https://github.com/IBM-Security/isam-support.git" >/dev/null 2>&1
+su - ansible -c "git clone https://github.com/IBM-Security/isam-ansible-collection.git" >/dev/null 2>&1
+su - ansible -c "git clone https://github.com/IBM-Security/isam-ansible-roles.git" >/dev/null 2>&1
