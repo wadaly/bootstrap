@@ -1,0 +1,205 @@
+version: '3'
+
+# These volumes preserve the state of the containers.
+# Run "docker-compose down -v" to reset them if you
+# want to make a fresh start. Otherwise, skip the -v
+# and the state will be preseved.
+
+volumes:
+  isamconfig:
+  libldap:
+  ldapslapd:
+  libsecauthority:
+  pgdata:
+
+  db2data_config:
+  db2data_runtime:
+
+# I am using a named network so I can connect to it
+# readily with containers from other docker-compose
+# files.
+
+networks:
+  default:
+    name: isam_v9
+
+# Should I create copies of all of these images and
+# save them on my own Docker Hub? Maybe. If I don't
+# want to lose my work. Vendor-supplied images are
+# available at the discretion of the vendor. Also, I
+# have seen many demos which are based on outdated
+# software and images break on newer versions of
+# software. Best for me to have some control over if and
+# when I make updates.
+#
+
+services:
+
+  openldap:
+    hostname: openldap
+    container_name: openldap
+    image: ibmcom/isam-openldap:9.0.7.0
+#   restart: always
+    command: --copy-service
+    environment:
+# Paramerterize these.
+# Maybe randomize passwords.
+      - LDAP_ADMIN_PASSWORD=$LDAP_ADMIN_PASSWORD
+      - LDAP_CONFIG_PASSWORD=$LDAP_CONFIG_PASSWORD
+      - LDAP_DOMAIN=test.com
+      - CONTAINER_TIMEZONE=$CONTAINER_TIMEZONE
+      - TZ=America/New_York
+    volumes:
+      - libldap:/var/lib/ldap
+      - ldapslapd:/etc/ldap/slapd.d
+      - libsecauthority:/var/lib/ldap.secAuthority
+      - ./shared_files/openldap/container/service/slapd/assets/certs:/container/service/slapd/assets/certs
+    ports:
+# If I want to make this accessible to only the host,
+# I can set this to 127.0.0.1.
+#     - 0.0.0.0:1636:636
+      - 127.0.0.1:636:636
+    expose:
+      - "389"
+      - "636"
+
+  postgresql:
+# I wonder why IBM favors postgresql instead of DB2 conainer for ISAM.
+    image: ibmcom/isam-postgresql:9.0.7.0
+    hostname: postgresql
+    container_name: postgresql
+#   restart: always
+    environment:
+      - POSTGRES_DB=$POSTGRES_DB
+      - POSTGRES_USER=$POSTGRES_USER
+      - POSTGRES_PASSWORD=$POSTGRES_PASSWORD
+      - POSTGRES_SSL_KEYDB=/var/local/server.pem
+#     - POSTGRES_UNSECURE=${DB_SSL_DISABLED}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+# This is the cert created by the bootstrap.yml compose configuration.
+      - ./shared_files/postgresql/var/local:/var/local
+    ports:
+#     - 0.0.0.0:5432:5432
+      - 127.0.0.1:5432:5432
+    expose:
+      - "5432"
+
+  isamdb2:
+    hostname: isamdb2
+    container_name: isamdb2
+    image: ibmcom/db2
+#   restart: always
+#   privileged: true
+    environment:
+      - LICENSE=accept
+      - DB2INSTANCE=$DB2INSTANCE
+      - DB2INST1_PASSWORD=$DB2INST1_PASSWORD
+      - DBNAME=$DBNAME
+      - BLU=false
+      - ENABLE_ORACLE_COMPATIBILITY=false
+      - UPDATEAVAIL=NO
+      - TO_CREATE_SAMPLEDB=false
+      - REPODB=false
+      - IS_OSXFS=false
+      - PERSISTENT_HOME=false
+      - HADR_ENABLED=false
+      - ETCD_ENDPOINT=
+      - ETCD_USERNAME=
+      - TZ=$CONTAINER_TIMEZONE
+    volumes:
+      - db2data_runtime:/database
+    ports:
+#     - 0.0.0.0:50000:50000
+      - 50000:50000
+
+# If you delete and recreate these Docker containers
+# frequently, it will likely become tedious to keep
+# reapplying the license key. If so, you may wish to
+# commit an activated isamconfig image and switch to
+# using that instead of the ibmcom/isam:9.0.7.1_IF4
+# image.
+  isamconfig:
+    hostname: isamconfig
+    container_name: isamconfig
+    image: ibmcom/isam:9.0.7.1_IF4
+#   restart: always
+    environment:
+      - SERVICE=config
+      - CONTAINER_TIMEZONE=$CONTAINER_TIMEZONE
+      - ADMIN_PWD=$ISAMCONFIG_ADMIN_PWD
+    volumes:
+      - isamconfig:/var/shared
+    ports:
+      - 443:9443
+# I may want to double check these exposed ports. Not sure if they are needed.
+#   expose:
+#     - 443:9443
+#     - "7135"
+#     - "7136"
+#     - "9443"
+
+  isamrp1:
+    hostname: isamrp1
+    container_name: isamrp1
+    image: ibmcom/isam:9.0.7.1_IF4
+#   restart: always
+    environment:
+      - SERVICE=webseal
+      - INSTANCE=rp1
+      - CONTAINER_TIMEZONE=$CONTAINER_TIMEZONE
+      - AUTO_RELOAD_FREQUENCY=30
+    volumes:
+      - isamconfig:/var/shared
+    ports:
+#     - 0.0.0.0:443:443
+# Mapping to 444 instead of 443 on the Docker host so
+# it does not conflict with the ISAM config container.
+# Browser handles this better than ISAM Ansible roles.
+      - 127.0.0.1:444:443
+#   depends_on:
+#     - openldap
+#     - isamconfig
+
+  isamdsc1:
+    hostname: isamdsc1
+    container_name: isamdsc1
+    image: ibmcom/isam:9.0.7.1_IF4
+#   restart: always
+    environment:
+      - SERVICE=dsc
+      - INSTANCE=1
+      - CONTAINER_TIMEZONE=$CONTAINER_TIMEZONE
+      - AUTO_RELOAD_FREQUENCY=5
+#     - AUTO_RELOAD_FREQUENCY=30
+    volumes:
+      - isamconfig:/var/shared
+    expose:
+      - "443"
+      - "444"
+#   depends_on:
+#     - openldap
+#     - isamconfig
+
+# This is for AAC/Federation
+  isamruntime:
+    hostname: isamruntime
+    container_name: isamruntime
+    image: ibmcom/isam:9.0.7.1_IF4
+#   restart: always
+    environment:
+      - SERVICE=runtime
+#     - SNAPSHOT=${SNAPSHOT}
+#     - FIXPACKS=${FIXPACKS}
+#     - CONTAINER_TIMEZONE=America/New_York
+      - CONTAINER_TIMEZONE=$CONTAINER_TIMEZONE
+      - AUTO_RELOAD_FREQUENCY=5
+    volumes:
+      - isamconfig:/var/shared
+    expose:
+      - "443"
+      - "444"
+#   depends_on:
+#     - openldap
+#     - postgresql
+#     - isamconfig
